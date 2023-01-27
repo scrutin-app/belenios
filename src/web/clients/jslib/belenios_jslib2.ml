@@ -105,8 +105,12 @@ let encryptBallot election cred plaintext =
   let ballot = P.string_of_ballot b in
   ballot
 
-(*
 let decrypt election cred plaintext =
+  Belenios_tool_common.Tool_election.(
+    ()
+  )
+
+(*
   let module RAW_ELECTION = struct let raw_election = election end in
   let module ELECTION = Election.Make (RAW_ELECTION) (Random) () in
 *)
