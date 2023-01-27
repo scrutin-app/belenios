@@ -91,17 +91,32 @@ let make_election (name:string) (description:string) (options:string array) : 'a
     params
   )
 
+module type ELECTION_LWT = ELECTION with type 'a m = 'a Lwt.t
+
+let encryptBallot election cred plaintext =
+  let module R = struct let raw_election = election end in
+  let module P = Election.Make (R) (Random) () in
+  let module CD = Credential.MakeDerive (P.G) in
+  (* let module P = (val election : ELECTION_LWT) in *)
+  (* let module G = P.G in *)
+  (* let module CD = Credential.MakeDerive (G) in *)
+  let sk = CD.derive P.election.e_uuid cred in
+  let b = P.E.create_ballot ~sk plaintext in
+  let ballot = P.string_of_ballot b in
+  ballot
+
+let ballotTracker ballot = 
+  sha256_b64 ballot
+
 let belenios =
   object%js
-    method print =
-      print_endline("Coucou")
-    method generate_trustee_key () =
-      generate_trustee_key ()
-    method make_election (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) =
+    method makeElection (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) =
       let options_tmp = js_options |> Js.to_array in
       let options : string array = Array.map Js.to_string options_tmp in
       let election = make_election (Js.to_string name) (Js.to_string description) options in
-      election
+      election |> Js.string
+    method encryptBallot election (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) =
+      encryptBallot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext))
   end
 
 let () = Js.export "belenios" belenios
