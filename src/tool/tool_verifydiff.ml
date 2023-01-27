@@ -20,6 +20,7 @@
 (**************************************************************************)
 
 open Belenios_core.Common
+open Belenios_tool_common
 open Common
 
 type verifydiff_error =

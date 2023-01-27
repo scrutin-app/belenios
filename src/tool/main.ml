@@ -23,6 +23,7 @@ module B = Belenios
 open Belenios_platform
 open Belenios_core.Serializable_j
 open Belenios_core.Common
+open Belenios_tool_common
 open Common
 open Cmdliner
 

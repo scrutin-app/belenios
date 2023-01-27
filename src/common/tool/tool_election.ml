@@ -23,7 +23,9 @@ module B = Belenios
 open Belenios_core.Serializable_j
 open Belenios_core.Signatures
 open Belenios_core.Common
-open Common
+
+exception Cmdline_error of string
+let failcmd fmt = Printf.ksprintf (fun x -> raise (Cmdline_error x)) fmt
 
 module type FILES = sig
   val fsck : unit -> unit

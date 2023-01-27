@@ -21,6 +21,7 @@
 
 open Belenios_core.Serializable_j
 open Belenios_core.Common
+open Belenios_tool_common
 open Common
 
 let get_last_event dir =

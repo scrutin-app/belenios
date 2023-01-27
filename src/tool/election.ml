@@ -22,6 +22,7 @@
 open Belenios_core.Common
 open Belenios_core.Serializable_j
 open Common
+open Belenios_tool_common
 open Tool_election
 open Cmdliner
 
