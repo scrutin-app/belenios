@@ -77,6 +77,11 @@
  (action (with-stdout-to %{target} (run ./wrap_tool.sh %{deps}))))
 
 (rule
+ (target belenios_jslib2.js)
+ (deps ../clients/jslib/belenios_jslib2.bc.js)
+ (action (with-stdout-to %{target} (run ./wrap_tool2.sh %{deps}))))
+
+(rule
  (target home.js)
  (deps ../clients/election-home/home.bc.js)
  (action (with-stdout-to %{target} (run ./wrap_tool.sh %{deps}))))
