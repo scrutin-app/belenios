@@ -1,6 +1,8 @@
 (* you may have to do this to require this file on nodejs *)
 (* belenios = {}; navigator = {userAgent: ""} *)
 
+[@@@ocaml.warning "-26-27-32-33-35-39"]
+
 open Lwt.Syntax
 open Js_of_ocaml
 open Js_of_ocaml_lwt
@@ -51,12 +53,25 @@ let generate_trustees () : 'a trustees =
   let my_trustee : 'a Serializable_t.trustee_kind = `Single(my_trustee_key) in
   [my_trustee]
 
-let make_election () : 'a = 
-  let questions = [] in
+let make_election (name:string) (description:string) (options:string array) : 'a = 
+
+  let questions : question list = 
+    let question_body: Question_h_t.question = {
+      q_answers = options;
+      q_blank = Some(false);
+      q_min = 0;
+      q_max = 1;
+      q_question = "Best";
+    } in
+    let question : question = Homomorphic(question_body) in
+    [
+      question
+    ]
+  in
 
   let template : template = {
-    t_description = "Test election";
-    t_name = "Test election";
+    t_name = name;
+    t_description = description;
     t_questions = Array.of_list(questions);
     t_administrator = None;
     t_credential_authority = None;
@@ -82,7 +97,11 @@ let belenios =
       print_endline("Coucou")
     method generate_trustee_key () =
       generate_trustee_key ()
-    method make_election () = make_election ()
+    method make_election (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) =
+      let options_tmp = js_options |> Js.to_array in
+      let options : string array = Array.map Js.to_string options_tmp in
+      let election = make_election (Js.to_string name) (Js.to_string description) options in
+      election
   end
 
 let () = Js.export "belenios" belenios
