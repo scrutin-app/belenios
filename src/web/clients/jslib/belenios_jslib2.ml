@@ -105,6 +105,12 @@ let encryptBallot election cred plaintext =
   let ballot = P.string_of_ballot b in
   ballot
 
+(*
+let decrypt election cred plaintext =
+  let module RAW_ELECTION = struct let raw_election = election end in
+  let module ELECTION = Election.Make (RAW_ELECTION) (Random) () in
+*)
+
 let ballotTracker ballot = 
   sha256_b64 ballot
 
