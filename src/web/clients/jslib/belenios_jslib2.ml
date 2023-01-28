@@ -157,11 +157,49 @@ let belenios =
       election |> Js.string
 
     method encryptBallot (election:Js.js_string Js.t) (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
-      encrypt_ballot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext)) (Js.to_string trustees)
+      let ballot = encrypt_ballot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext)) (Js.to_string trustees) in
+      ballot |> Js.string
 
     method makeCredentials (uuid:Js.js_string Js.t) (n:int) =
       let public_creds, private_creds = make_credentials (Js.to_string uuid) n in
       Js.array [|(Js.array @@ Array.of_list @@ List.map Js.string public_creds); (Js.array @@ Array.of_list @@ List.map Js.string private_creds)|]
+
+    method decrypt
+      (election:Js.js_string Js.t)
+      (ballots:(Js.js_string Js.t) Js.js_array Js.t)
+      (trustees:Js.js_string Js.t)
+      (credentials:(Js.js_string Js.t) Js.js_array Js.t)
+      (privkey:Js.js_string Js.t)
+      =
+      let a, b = decrypt
+        (Js.to_string election)
+        (Array.to_list @@ Array.map Js.to_string (Js.to_array ballots))
+        (Js.to_string trustees)
+        (Array.to_list @@ Array.map Js.to_string (Js.to_array credentials))
+        (Js.to_string privkey)
+      in
+      Js.array [| a |> Js.string ; b |> Js.string |]
+
+    method result
+      (election:Js.js_string Js.t)
+      (ballots:(Js.js_string Js.t) Js.js_array Js.t)
+      (trustees:Js.js_string Js.t)
+      (credentials:(Js.js_string Js.t) Js.js_array Js.t)
+      (a:Js.js_string Js.t)
+      (b:Js.js_string Js.t)
+      =
+      let election = Js.to_string election in
+      let ballots = Array.to_list @@ Array.map Js.to_string (Js.to_array ballots) in
+      let trustees = Js.to_string trustees in
+      let credentials = Array.to_list @@ Array.map Js.to_string (Js.to_array credentials) in
+      let a = Js.to_string a in
+      let b = Js.to_string b in
+      let my_owned_hash = owned_of_string read_hash b in
+      let partial_decryptions = [
+        (my_owned_hash.owned_payload,my_owned_hash,a)
+      ] in
+      let res = compute_result election ballots trustees credentials partial_decryptions in
+      res |> Js.string
 
     method demo () =
       let priv, trustees = generate_trustee () in
@@ -179,9 +217,11 @@ let belenios =
       let ballot_2 = encrypt_ballot election (List.nth private_creds 1) [| [|0; 1|] |] trustees in
       let ballot_3 = encrypt_ballot election (List.nth private_creds 2) [| [|1; 0|] |] trustees in
 
+      (*
       let a, b = compute_encrypted_tally election [ballot_1; ballot_2; ballot_3] trustees public_creds in
       print_endline a;
       print_endline b;
+      *)
 
       let a, b = decrypt election [ballot_1; ballot_2; ballot_3] trustees public_creds priv in
       print_endline a;
