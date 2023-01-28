@@ -115,19 +115,7 @@ let make_credentials uuid n =
 
 module type ELECTION_LWT = ELECTION with type 'a m = 'a Lwt.t
 
-let encryptBallot election cred plaintext =
-  let module R = struct let raw_election = election end in
-  let module P = Election.Make (R) (Random) () in
-  let module CD = Credential.MakeDerive (P.G) in
-  (* let module P = (val election : ELECTION_LWT) in *)
-  (* let module G = P.G in *)
-  (* let module CD = Credential.MakeDerive (G) in *)
-  let sk = CD.derive P.election.e_uuid cred in
-  let b = P.E.create_ballot ~sk plaintext in
-  let ballot = P.string_of_ballot b in
-  ballot
-
-let encryptBallot2 election cred plaintext trustees =
+let encrypt_ballot election cred plaintext trustees =
   Belenios_tool_common.Tool_election.(
     let module PR : PARAMS_RAW = struct
       let raw_election = election
@@ -189,10 +177,9 @@ let belenios =
       let options : string array = Array.map Js.to_string options_tmp in
       let priv, trustees, election = make_election (Js.to_string name) (Js.to_string description) options in
       election |> Js.string
-    method encryptBallot election (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) =
-      encryptBallot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext))
-    method encryptBallot2 election (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
-      encryptBallot2 (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext)) (Js.to_string trustees)
+
+    method encryptBallot (election:Js.js_string Js.t) (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
+      encrypt_ballot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext)) (Js.to_string trustees)
     
     method makeCredentials (uuid:Js.js_string Js.t) (n:int) =
       ()
@@ -211,9 +198,9 @@ let belenios =
       let get_snd (a, b) = b in
       let get_priv_n l n = get_snd (List.nth l n) in
       
-      let ballot_1 = encryptBallot2 election (get_priv_n private_creds 0) [| [|0; 1|] |] trustees in
-      let ballot_2 = encryptBallot2 election (get_priv_n private_creds 1) [| [|0; 1|] |] trustees in
-      let ballot_3 = encryptBallot2 election (get_priv_n private_creds 2) [| [|1; 0|] |] trustees in
+      let ballot_1 = encrypt_ballot election (get_priv_n private_creds 0) [| [|0; 1|] |] trustees in
+      let ballot_2 = encrypt_ballot election (get_priv_n private_creds 1) [| [|0; 1|] |] trustees in
+      let ballot_3 = encrypt_ballot election (get_priv_n private_creds 2) [| [|1; 0|] |] trustees in
 
       let a, b = compute_encrypted_tally election [ballot_1; ballot_2; ballot_3] trustees public_creds in
       print_endline a;
