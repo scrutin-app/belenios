@@ -70,3 +70,6 @@ release:
 	else \
 	  echo "The tree is not clean!"; exit 1; \
 	fi
+
+jslib2:
+	dune build src/common/tool src/web/clients/jslib/ src/web/static --profile=prod && cp -f _build/default/src/web/static/belenios_jslib2.js ../scrutin/src/
