@@ -17,3 +17,15 @@ module type S = sig
 end
 
 module Make (P : PARAMS) () : S with type 'a m := 'a
+
+open Belenios_core.Serializable_t
+
+module type PARAMS_RAW = sig
+  val raw_election : string
+  val trustees : string
+  val ballots : string list
+  val public_creds : string list
+  val pds : (hash * hash owned * string) list
+end
+
+module MakeRaw (PR : PARAMS_RAW) () : S with type 'a m := 'a

@@ -251,7 +251,7 @@ let append index ops =
 let init ~file ~election ~trustees ~public_creds =
   if Sys.file_exists file then
     Printf.ksprintf failwith "%s already exists" file;
-  let timestamp = Unix.time () |> Int64.of_float in
+  let timestamp = (*Unix.time ()*) 0.0 |> Int64.of_float in
   let index =
     {
       map = Hashtbl.create 1000;

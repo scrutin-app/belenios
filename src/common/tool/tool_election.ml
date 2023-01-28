@@ -126,9 +126,9 @@ module MakeGetters (X : PARAMS) : FILES = struct
   let print_msg = prerr_endline
 end
 
-module Make (P : PARAMS) () = struct
+module MakeWithGetters (F : FILES) () = struct
 
-  include MakeGetters (P)
+  include F
   include B.Election.Make (struct let raw_election = raw_election end) (M) ()
   module Trustees = (val B.Trustees.get_by_version election.e_version)
   let ( let* ) = M.bind
@@ -576,3 +576,33 @@ module Make (P : PARAMS) () = struct
     string_of_sized_encrypted_tally write_hash sized
 
 end
+
+module Make (P : PARAMS) = MakeWithGetters (MakeGetters (P))
+
+module type PARAMS_RAW = sig
+  val raw_election : string
+  val trustees : string
+  val ballots : string list
+  val public_creds : string list
+  val pds : (hash * hash owned * string) list
+end
+
+module MakeRawGetters (P : PARAMS_RAW) : FILES = struct
+  let fsck () = ()
+  let setup_data =
+    let setup_election = Hash.hash_string P.raw_election in
+    let setup_trustees = Hash.hash_string "" in
+    let setup_credentials = Hash.hash_string "" in
+    let setup_data = {setup_election; setup_trustees; setup_credentials} in
+    setup_data
+  let raw_election = P.raw_election
+  let get_public_creds () = (Some P.public_creds)
+  let get_trustees () = (Some P.trustees)
+  let get_ballots () = Some(P.ballots)
+  let get_shuffles () = None
+  let get_pds () = Some(P.pds)
+  let get_result () = None
+  let print_msg = print_endline
+end
+
+module MakeRaw (P : PARAMS_RAW) = MakeWithGetters (MakeRawGetters (P))

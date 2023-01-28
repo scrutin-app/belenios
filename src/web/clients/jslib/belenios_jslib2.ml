@@ -48,10 +48,16 @@ let generate_trustee_key () : 'a trustee_public_key =
     (*kp.R.pub*)
   )
 
-let generate_trustees () : 'a trustees =
-  let my_trustee_key = generate_trustee_key () in
-  let my_trustee : 'a Serializable_t.trustee_kind = `Single(my_trustee_key) in
-  [my_trustee]
+let generate_trustees () =
+  Belenios_tool_common.Tool_tkeygen.(
+    let module R = Make (P) (Random) () in
+    let kp = R.trustee_keygen () in
+    (*kp.R.id, kp.R.pub, kp.R.priv*)
+    let my_trustee_key = trustee_public_key_of_string Yojson.Safe.read_json kp.R.pub in
+    (*kp.R.pub*)
+    let my_trustee : 'a Serializable_t.trustee_kind = `Single(my_trustee_key) in
+    kp.R.priv, [my_trustee]  
+  )
 
 let make_election (name:string) (description:string) (options:string array) : 'a = 
 
@@ -77,18 +83,34 @@ let make_election (name:string) (description:string) (options:string array) : 'a
     t_credential_authority = None;
   } in
 
+  let priv, trustees_tmp = generate_trustees () in
+  let trustees = string_of_trustees Yojson.Safe.write_json trustees_tmp in
+  print_endline trustees;
+
   let module P = struct
     let version = 1
     let group = "BELENIOS-2048"
     let uuid = generate_token ()
     let template = template |> string_of_template
-    let get_trustees () = string_of_trustees Yojson.Safe.write_json (generate_trustees ())
+    let get_trustees () = trustees
   end in
 
   Belenios_tool_common.Tool_mkelection.(
     let module R = (val make (module P : PARAMS) : S) in
     let params = R.mkelection () in
-    params
+    priv, trustees, params
+  )
+
+let make_credentials uuid n =
+  let module P = struct
+    let version = 1
+    let group = "BELENIOS-2048"
+    let uuid = uuid
+  end in
+  Belenios_tool_common.Tool_credgen.(
+    let module R = Make (P) (Random) () in
+    let ids = generate_ids n in
+    R.generate ids
   )
 
 module type ELECTION_LWT = ELECTION with type 'a m = 'a Lwt.t
@@ -105,15 +127,57 @@ let encryptBallot election cred plaintext =
   let ballot = P.string_of_ballot b in
   ballot
 
-let decrypt election cred plaintext =
+let encryptBallot2 election cred plaintext trustees =
   Belenios_tool_common.Tool_election.(
-    ()
+    let module PR : PARAMS_RAW = struct
+      let raw_election = election
+      let trustees = trustees
+      let ballots = []
+      let public_creds = []
+      let pds = []
+    end in
+    let module X = MakeRaw (PR) () in
+    X.vote (Some cred) plaintext
   )
 
-(*
-  let module RAW_ELECTION = struct let raw_election = election end in
-  let module ELECTION = Election.Make (RAW_ELECTION) (Random) () in
-*)
+let compute_encrypted_tally election ballots trustees public_creds =
+  Belenios_tool_common.Tool_election.(
+    let module PR : PARAMS_RAW = struct
+      let raw_election = election
+      let trustees = trustees
+      let ballots = ballots
+      let public_creds = public_creds
+      let pds = []
+    end in
+    let module X = MakeRaw (PR) () in
+    X.compute_encrypted_tally ()
+  )
+
+let decrypt election ballots trustees public_creds priv_key =
+  Belenios_tool_common.Tool_election.(
+    let module PR : PARAMS_RAW = struct
+      let raw_election = election
+      let trustees = trustees
+      let ballots = ballots
+      let public_creds = public_creds
+      let pds = []
+    end in
+    let module X = MakeRaw (PR) () in
+    X.decrypt 1 priv_key
+  )
+
+let compute_result election ballots trustees public_creds partial_decryptions = 
+  Belenios_tool_common.Tool_election.(
+    let module PR : PARAMS_RAW = struct
+      let raw_election = election
+      let trustees = trustees
+      let ballots = ballots
+      let public_creds = public_creds
+      let pds = partial_decryptions
+    end in
+    let module X = MakeRaw (PR) () in
+    X.compute_result ()
+  )
 
 let ballotTracker ballot = 
   sha256_b64 ballot
@@ -123,10 +187,50 @@ let belenios =
     method makeElection (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) =
       let options_tmp = js_options |> Js.to_array in
       let options : string array = Array.map Js.to_string options_tmp in
-      let election = make_election (Js.to_string name) (Js.to_string description) options in
+      let priv, trustees, election = make_election (Js.to_string name) (Js.to_string description) options in
       election |> Js.string
     method encryptBallot election (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) =
       encryptBallot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext))
+    method encryptBallot2 election (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
+      encryptBallot2 (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext)) (Js.to_string trustees)
+    
+    method makeCredentials (uuid:Js.js_string Js.t) (n:int) =
+      ()
+
+    method demo () =
+      let priv, trustees, election = make_election "test" "test" [| "fraise"; "framboise" |] in
+
+      let election_struct = params_of_string election in
+      let uuid_s = (string_of_uuid election_struct.e_uuid) in
+      let uuid = String.sub uuid_s 1 ((String.length uuid_s) - 2) in
+
+      let credentials = make_credentials uuid 10 in
+      let public_creds = credentials.public in 
+      let private_creds = credentials.priv in 
+
+      let get_snd (a, b) = b in
+      let get_priv_n l n = get_snd (List.nth l n) in
+      
+      let ballot_1 = encryptBallot2 election (get_priv_n private_creds 0) [| [|0; 1|] |] trustees in
+      let ballot_2 = encryptBallot2 election (get_priv_n private_creds 1) [| [|0; 1|] |] trustees in
+      let ballot_3 = encryptBallot2 election (get_priv_n private_creds 2) [| [|1; 0|] |] trustees in
+
+      let a, b = compute_encrypted_tally election [ballot_1; ballot_2; ballot_3] trustees public_creds in
+      print_endline a;
+      print_endline b;
+
+      let a, b = decrypt election [ballot_1; ballot_2; ballot_3] trustees public_creds priv in
+      print_endline a;
+      print_endline b;
+
+      let my_owned_hash = owned_of_string read_hash b in
+      let partial_decryptions = [
+        (my_owned_hash.owned_payload,my_owned_hash,a)
+      ] in
+
+      let res = compute_result election [ballot_1; ballot_2; ballot_3] trustees public_creds partial_decryptions in
+      print_endline res;
+      ()
   end
 
 let () = Js.export "belenios" belenios
