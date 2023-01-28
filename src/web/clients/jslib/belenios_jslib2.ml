@@ -1,5 +1,6 @@
 (* you may have to do this to require this file on nodejs *)
 (* belenios = {}; navigator = {userAgent: ""} *)
+(* the belenios object will be populated *)
 
 [@@@ocaml.warning "-26-27-32-33-35-39"]
 
@@ -20,46 +21,22 @@ end
 
 open Belenios_platform.Platform
 
-module Random = struct
-  type 'a t = 'a
-  let yield () = ()
-  let return x = x
-  let bind x f = f x
-  let fail e = raise e
-
-  let prng = lazy (pseudo_rng (random_string secure_rng 16))
-
-  let random q =
-    let size = bytes_to_sample q in
-    let r = random_string (Lazy.force prng) size in
-    Z.(of_bits r mod q)
-end
+module Random = Belenios_tool_common.Random
 
 let generate_token () =
   let module X = MakeGenerateToken (Random) in
   X.generate_token ~length:14 ()
 
-let generate_trustee_key () : 'a trustee_public_key =
+let generate_trustee () =
   Belenios_tool_common.Tool_tkeygen.(
     let module R = Make (P) (Random) () in
     let kp = R.trustee_keygen () in
-    (*kp.R.id, kp.R.pub, kp.R.priv*)
-    trustee_public_key_of_string Yojson.Safe.read_json kp.R.pub
-    (*kp.R.pub*)
-  )
-
-let generate_trustees () =
-  Belenios_tool_common.Tool_tkeygen.(
-    let module R = Make (P) (Random) () in
-    let kp = R.trustee_keygen () in
-    (*kp.R.id, kp.R.pub, kp.R.priv*)
     let my_trustee_key = trustee_public_key_of_string Yojson.Safe.read_json kp.R.pub in
-    (*kp.R.pub*)
     let my_trustee : 'a Serializable_t.trustee_kind = `Single(my_trustee_key) in
-    kp.R.priv, [my_trustee]  
+    kp.R.priv, (string_of_trustees Yojson.Safe.write_json [my_trustee])
   )
 
-let make_election (name:string) (description:string) (options:string array) : 'a = 
+let make_election (name:string) (description:string) (options:string array) (trustees:string) : 'a = 
 
   let questions : question list = 
     let question_body: Question_h_t.question = {
@@ -83,10 +60,6 @@ let make_election (name:string) (description:string) (options:string array) : 'a
     t_credential_authority = None;
   } in
 
-  let priv, trustees_tmp = generate_trustees () in
-  let trustees = string_of_trustees Yojson.Safe.write_json trustees_tmp in
-  print_endline trustees;
-
   let module P = struct
     let version = 1
     let group = "BELENIOS-2048"
@@ -98,7 +71,7 @@ let make_election (name:string) (description:string) (options:string array) : 'a
   Belenios_tool_common.Tool_mkelection.(
     let module R = (val make (module P : PARAMS) : S) in
     let params = R.mkelection () in
-    priv, trustees, params
+    params
   )
 
 let make_credentials uuid n =
@@ -110,7 +83,8 @@ let make_credentials uuid n =
   Belenios_tool_common.Tool_credgen.(
     let module R = Make (P) (Random) () in
     let ids = generate_ids n in
-    R.generate ids
+    let credentials = R.generate ids in
+    credentials.public, (List.map (fun (a, b) -> b) credentials.priv)
   )
 
 module type ELECTION_LWT = ELECTION with type 'a m = 'a Lwt.t
@@ -172,35 +146,38 @@ let ballotTracker ballot =
 
 let belenios =
   object%js
-    method makeElection (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) =
+    method genTrustee =
+      let privkey, trustees = generate_trustee () in
+      Js.array [| Js.string privkey; Js.string trustees |]
+
+    method makeElection (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
       let options_tmp = js_options |> Js.to_array in
       let options : string array = Array.map Js.to_string options_tmp in
-      let priv, trustees, election = make_election (Js.to_string name) (Js.to_string description) options in
+      let election = make_election (Js.to_string name) (Js.to_string description) options (Js.to_string trustees) in
       election |> Js.string
 
     method encryptBallot (election:Js.js_string Js.t) (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
       encrypt_ballot (Js.to_string election) (Js.to_string cred) (Array.map Js.to_array (Js.to_array plaintext)) (Js.to_string trustees)
-    
+
     method makeCredentials (uuid:Js.js_string Js.t) (n:int) =
-      ()
+      let public_creds, private_creds = make_credentials (Js.to_string uuid) n in
+      Js.array [|(Js.array @@ Array.of_list @@ List.map Js.string public_creds); (Js.array @@ Array.of_list @@ List.map Js.string private_creds)|]
 
     method demo () =
-      let priv, trustees, election = make_election "test" "test" [| "fraise"; "framboise" |] in
+      let priv, trustees = generate_trustee () in
+      print_endline(trustees);
+
+      let election = make_election "test" "test" [| "fraise"; "framboise" |] trustees in
 
       let election_struct = params_of_string election in
       let uuid_s = (string_of_uuid election_struct.e_uuid) in
       let uuid = String.sub uuid_s 1 ((String.length uuid_s) - 2) in
 
-      let credentials = make_credentials uuid 10 in
-      let public_creds = credentials.public in 
-      let private_creds = credentials.priv in 
+      let public_creds, private_creds = make_credentials uuid 10 in
 
-      let get_snd (a, b) = b in
-      let get_priv_n l n = get_snd (List.nth l n) in
-      
-      let ballot_1 = encrypt_ballot election (get_priv_n private_creds 0) [| [|0; 1|] |] trustees in
-      let ballot_2 = encrypt_ballot election (get_priv_n private_creds 1) [| [|0; 1|] |] trustees in
-      let ballot_3 = encrypt_ballot election (get_priv_n private_creds 2) [| [|1; 0|] |] trustees in
+      let ballot_1 = encrypt_ballot election (List.nth private_creds 0) [| [|0; 1|] |] trustees in
+      let ballot_2 = encrypt_ballot election (List.nth private_creds 1) [| [|0; 1|] |] trustees in
+      let ballot_3 = encrypt_ballot election (List.nth private_creds 2) [| [|1; 0|] |] trustees in
 
       let a, b = compute_encrypted_tally election [ballot_1; ballot_2; ballot_3] trustees public_creds in
       print_endline a;
