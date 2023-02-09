@@ -87,6 +87,19 @@ let make_credentials uuid n =
     credentials.public, (List.map (fun (a, b) -> b) credentials.priv)
   )
 
+let derive_credential uuid public_credential =
+  let module P = struct
+    let version = 1
+    let group = "BELENIOS-2048"
+    let uuid = uuid
+  end in
+  Belenios_tool_common.Tool_credgen.(
+    let module R = Make (P) (Random) () in
+    R.derive public_credential
+  )
+  (*let module C = Credential.MakeDerive (P) in*)
+
+
 module type ELECTION_LWT = ELECTION with type 'a m = 'a Lwt.t
 
 let encrypt_ballot election cred plaintext trustees =
@@ -163,6 +176,9 @@ let belenios =
     method makeCredentials (uuid:Js.js_string Js.t) (n:int) =
       let public_creds, private_creds = make_credentials (Js.to_string uuid) n in
       Js.array [|(Js.array @@ Array.of_list @@ List.map Js.string public_creds); (Js.array @@ Array.of_list @@ List.map Js.string private_creds)|]
+
+    method derive (uuid:Js.js_string Js.t) (public_credential:Js.js_string Js.t) =
+      Js.string @@ derive_credential (Js.to_string uuid) (Js.to_string public_credential)
 
     method decrypt
       (election:Js.js_string Js.t)
