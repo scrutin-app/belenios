@@ -79,7 +79,7 @@ let make_election_majority_judgment (name:string) (description:string) (candidat
   let make_question question =
     let question_body: Question_h_t.question = {
       q_answers = [| "Excellent"; "Very good"; "Good"; "Passable"; "Inadequate"; "Mediocre" |];
-      q_blank = Some(true);
+      q_blank = Some(false);
       q_min = 0;
       q_max = 1;
       q_question = question;
