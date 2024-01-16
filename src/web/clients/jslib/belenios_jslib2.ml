@@ -74,6 +74,45 @@ let make_election (name:string) (description:string) (options:string array) (tru
     params
   )
 
+let make_election_majority_judgment (name:string) (description:string) (candidates:string array) (trustees:string) : 'a = 
+
+  let make_question question =
+    let question_body: Question_h_t.question = {
+      q_answers = [| "Excellent"; "Very good"; "Good"; "Passable"; "Inadequate"; "Mediocre" |];
+      q_blank = Some(true);
+      q_min = 0;
+      q_max = 1;
+      q_question = question;
+    } in
+    let question : question = Homomorphic(question_body) in
+    question
+  in
+
+  let questions : question list = Array.to_list (Array.map make_question candidates)
+  in
+
+  let template : template = {
+    t_name = name;
+    t_description = description;
+    t_questions = Array.of_list(questions);
+    t_administrator = None;
+    t_credential_authority = None;
+  } in
+
+  let module P = struct
+    let version = 1
+    let group = "BELENIOS-2048"
+    let uuid = generate_token ()
+    let template = template |> string_of_template
+    let get_trustees () = trustees
+  end in
+
+  Belenios_tool_common.Tool_mkelection.(
+    let module R = (val make (module P : PARAMS) : S) in
+    let params = R.mkelection () in
+    params
+  )
+
 let make_credentials uuid n =
   let module P = struct
     let version = 1
@@ -157,6 +196,8 @@ let compute_result election ballots trustees public_creds partial_decryptions =
 let ballotTracker ballot = 
   sha256_b64 ballot
 
+let belenios = Js.Unsafe.pure_js_expr "belenios"
+
 let belenios =
   object%js
     method genTrustee =
@@ -167,6 +208,12 @@ let belenios =
       let options_tmp = js_options |> Js.to_array in
       let options : string array = Array.map Js.to_string options_tmp in
       let election = make_election (Js.to_string name) (Js.to_string description) options (Js.to_string trustees) in
+      election |> Js.string
+
+    method makeElectionMajorityJudgment (name:Js.js_string Js.t) (description:Js.js_string Js.t) (js_options:(Js.js_string Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
+      let options_tmp = js_options |> Js.to_array in
+      let options : string array = Array.map Js.to_string options_tmp in
+      let election = make_election_majority_judgment (Js.to_string name) (Js.to_string description) options (Js.to_string trustees) in
       election |> Js.string
 
     method encryptBallot (election:Js.js_string Js.t) (cred:Js.js_string Js.t) (plaintext:(int Js.js_array Js.t) Js.js_array Js.t) (trustees:Js.js_string Js.t) =
@@ -251,6 +298,7 @@ let belenios =
       let res = compute_result election [ballot_1; ballot_2; ballot_3] trustees public_creds partial_decryptions in
       print_endline res;
       ()
+    val mutable sjcl = belenios##.sjcl (*Belenios_platform.sjcl*)
   end
 
 let () = Js.export "belenios" belenios
